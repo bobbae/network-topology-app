@@ -293,23 +293,11 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
 
   const options = useMemo(() => getNetworkOptions(), [])
 
-  // Manage the vis-network instance’s life-cycle.
-  // • Create it the first time a node is selected.
-  // • Reuse the same instance while the user keeps selecting nodes.
-  // • Destroy it when the selection becomes null so React can unmount
-  //   the container div without DOM conflicts.
+  // Create the vis-network instance the first time a node is selected.
+  // Keep the instance alive while the user keeps selecting nodes so that
+  // React never needs to un-mount the canvas (avoids DOMException).
   useEffect(() => {
-    // No node selected → ensure any previous network is cleaned up.
-    if (!selectedNode) {
-      if (networkInstance.current) {
-        networkInstance.current.destroy()
-        networkInstance.current = null
-      }
-      return
-    }
-
-    // Create the network once for the currently mounted canvas.
-    if (networkRef.current && !networkInstance.current) {
+    if (selectedNode && networkRef.current && !networkInstance.current) {
       const network = new Network(networkRef.current, {}, options)
       networkInstance.current = network
 
@@ -317,14 +305,24 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
         network.setOptions({ physics: false })
       }
       network.on('stabilizationIterationsDone', stabilizationDoneHandler)
+    }
+  }, [selectedNode, options])
 
-      return () => {
-        network.off('stabilizationIterationsDone', stabilizationDoneHandler)
-        network.destroy()
+  // Destroy the vis-network instance when the selection becomes null or
+  // when this component unmounts.
+  useEffect(() => {
+    if (!selectedNode && networkInstance.current) {
+      networkInstance.current.destroy()
+      networkInstance.current = null
+    }
+
+    return () => {
+      if (networkInstance.current) {
+        networkInstance.current.destroy()
         networkInstance.current = null
       }
     }
-  }, [options, selectedNode])
+  }, [selectedNode])
 
   // Update data in network instance
   useEffect(() => {
