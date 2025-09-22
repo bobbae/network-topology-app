@@ -293,9 +293,17 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
 
   const options = useMemo(() => getNetworkOptions(), [])
 
-  // Initialize network instance
+  // Initialize (or re-initialize) the network canvas every time a new
+  // root node is selected so that the ref is mounted before vis creates
+  // the instance.
   useEffect(() => {
-    if (networkRef.current) {
+    // Destroy any prior instance to avoid memory leaks
+    if (networkInstance.current) {
+      networkInstance.current.destroy()
+      networkInstance.current = null
+    }
+
+    if (networkRef.current && selectedNode) {
       const network = new Network(networkRef.current, {}, options)
       networkInstance.current = network
 
@@ -305,13 +313,12 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
       network.on('stabilizationIterationsDone', stabilizationDoneHandler)
 
       return () => {
-        if (networkInstance.current) {
-          networkInstance.current.destroy()
-          networkInstance.current = null
-        }
+        network.off('stabilizationIterationsDone', stabilizationDoneHandler)
+        network.destroy()
+        networkInstance.current = null
       }
     }
-  }, [options])
+  }, [options, selectedNode])
 
   // Update data in network instance
   useEffect(() => {
