@@ -297,11 +297,6 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
   // root node is selected so that the ref is mounted before vis creates
   // the instance.
   useEffect(() => {
-    // Destroy any prior instance to avoid memory leaks
-    if (networkInstance.current) {
-      networkInstance.current.destroy()
-      networkInstance.current = null
-    }
 
     if (networkRef.current && selectedNode) {
       const network = new Network(networkRef.current, {}, options)
