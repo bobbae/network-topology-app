@@ -293,17 +293,23 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
 
   const options = useMemo(() => getNetworkOptions(), [])
 
-  // Initialize (or re-initialize) the network canvas every time a new
-  // root node is selected so that the ref is mounted before vis creates
-  // the instance.
+  // Manage the vis-network instance’s life-cycle.
+  // • Create it the first time a node is selected.
+  // • Reuse the same instance while the user keeps selecting nodes.
+  // • Destroy it when the selection becomes null so React can unmount
+  //   the container div without DOM conflicts.
   useEffect(() => {
-    // Clean up any previous vis-network instance before creating a new one
-    if (networkInstance.current) {
-      networkInstance.current.destroy()
-      networkInstance.current = null
+    // No node selected → ensure any previous network is cleaned up.
+    if (!selectedNode) {
+      if (networkInstance.current) {
+        networkInstance.current.destroy()
+        networkInstance.current = null
+      }
+      return
     }
 
-    if (networkRef.current && selectedNode) {
+    // Create the network once for the currently mounted canvas.
+    if (networkRef.current && !networkInstance.current) {
       const network = new Network(networkRef.current, {}, options)
       networkInstance.current = network
 
