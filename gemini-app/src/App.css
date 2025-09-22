@@ -1,0 +1,128 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #282c34;
+  color: #abb2bf;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #1e2127;
+  border-bottom: 1px solid #3a3f4a;
+  color: #61dafb;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5em;
+}
+
+.header-controls .button {
+  background-color: #61dafb;
+  color: #282c34;
+  border: none;
+  padding: 8px 15px;
+  margin-left: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background-color 0.2s;
+}
+
+.header-controls .button:hover {
+  background-color: #21a1f1;
+}
+
+.main-content {
+  display: flex;
+  flex-grow: 1;
+}
+
+.left-panel, .right-panel {
+  padding: 15px;
+  border-right: 1px solid #3a3f4a;
+  background-color: #2d3036;
+  overflow-y: auto; /* For scrollable treeview/content */
+}
+
+.left-panel {
+  flex: 0 0 300px; /* Fixed width for left panel */
+  background-color: #21252b;
+}
+
+.left-panel h2, .right-panel h2 {
+  color: #61dafb;
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.2em;
+}
+
+.tree-container {
+  background-color: #21252b; /* Match panel background */
+  padding: 5px 0;
+}
+
+/* rc-tree overrides for dark theme */
+.rc-tree {
+  background-color: #21252b;
+  color: #abb2bf;
+}
+.rc-tree .rc-tree-node-content-wrapper:hover {
+  background-color: #3a3f4a;
+}
+.rc-tree .rc-tree-node-content-wrapper.rc-tree-node-selected {
+  background-color: #61dafb33; /* Light blue tint */
+}
+.rc-tree .rc-tree-node-content-wrapper .rc-tree-title {
+  color: #abb2bf;
+}
+.rc-tree .rc-tree-switcher {
+  color: #abb2bf; /* For the expand/collapse icons */
+}
+.rc-tree .rc-tree-switcher_open::after,
+.rc-tree .rc-tree-switcher_close::after {
+  /* Customize tree expand/collapse icons if needed */
+  font-family: 'rc-tree-icon'; /* Placeholder, use real font/svg if custom */
+  content: '\00b7'; /* Bullet for simple visual */
+  font-size: 1.5em;
+  line-height: 0.7;
+}
+
+.right-panel {
+  flex-grow: 1; /* Takes remaining space */
+  display: flex;
+  flex-direction: column;
+}
+
+.react-flow-container {
+  flex-grow: 1;
+  background-color: #2d3036;
+  border: 1px solid #3a3f4a;
+  border-radius: 8px;
+  overflow: hidden; /* Ensure React Flow content stays within bounds */
+  position: relative; /* Needed for react-flow-renderer */
+}
+
+.no-selection-message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 1.2em;
+  color: #7f848e;
+}
