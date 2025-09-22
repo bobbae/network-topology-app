@@ -1,57 +1,59 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Network } from 'vis-network'
-import { DataSet } from 'vis-data'
+import { DataSet } from 'vis-data/peer'
 import { FaNetworkWired, FaServer, FaDesktop, FaInfoCircle, FaCog, FaLink, FaTrash } from 'react-icons/fa'
 import './TopologyView.css'
 
-const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
+const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections, onCustomConnectionsChange }) => {
   const networkRef = useRef(null)
   const networkInstance = useRef(null)
   const [showNodeInfo, setShowNodeInfo] = useState(false)
   const [selectedTopoNode, setSelectedTopoNode] = useState(null)
   const [connectionMode, setConnectionMode] = useState(false)
   const [firstSelectedNode, setFirstSelectedNode] = useState(null)
-  const [customConnections, setCustomConnections] = useState([])
   const [selectedConnectionType, setSelectedConnectionType] = useState('ethernet')
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, nodeId: null })
   const [editingNodeData, setEditingNodeData] = useState(null)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [networkData, setNetworkData] = useState({ nodes: new DataSet(), edges: new DataSet() })
 
   // Convert tree data to vis-network format
-  const convertToNetworkData = (node, parentId = null) => {
+  const convertToNetworkData = useCallback((rootNode) => {
     const nodes = []
     const edges = []
 
-    if (!node) return { nodes: [], edges: [] }
+    const recurse = (node, parentId) => {
+      if (!node) return;
 
-    // Add current node
-    const nodeStyle = getNodeStyle(node.type, node.id)
-    nodes.push({
-      id: node.id,
-      label: node.name,
-      group: node.type,
-      title: `${node.name}${node.ip ? ` (${node.ip})` : ''}`,
-      physics: true,
-      ...nodeStyle
-    })
-
-    // Add edge to parent if exists
-    if (parentId) {
-      edges.push({
-        id: `${parentId}-${node.id}`,
-        from: parentId,
-        to: node.id,
-        ...getEdgeStyle(node.type)
+      // Add current node
+      const nodeStyle = getNodeStyle(node.type, node.id)
+      nodes.push({
+        id: node.id,
+        label: node.name,
+        group: node.type,
+        title: `${node.name}${node.ip ? ` (${node.ip})` : ''}`,
+        physics: true,
+        ...nodeStyle
       })
+
+      // Add edge to parent if exists
+      if (parentId) {
+        edges.push({
+          id: `${parentId}-${node.id}`,
+          from: parentId,
+          to: node.id,
+          ...getEdgeStyle(node.type)
+        })
+      }
+
+      // Recursively process children
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(child => recurse(child, node.id))
+      }
     }
 
-    // Recursively process children
-    if (node.children && node.children.length > 0) {
-      node.children.forEach(child => {
-        const childData = convertToNetworkData(child, node.id)
-        nodes.push(...childData.nodes)
-        edges.push(...childData.edges)
-      })
+    if (rootNode) {
+      recurse(rootNode, null)
     }
 
     // Add custom connections
@@ -72,7 +74,7 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
     })
 
     return { nodes, edges }
-  }
+  }, [customConnections, connectionMode, firstSelectedNode])
 
   const getNodeStyle = (type, nodeId) => {
     const isFirstSelected = connectionMode && firstSelectedNode === nodeId
@@ -276,124 +278,123 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
     }
   })
 
-  // Initialize or update network
+  // Update network data when selectedNode or customConnections change
   useEffect(() => {
-    if (!selectedNode || !networkRef.current) return
-
-    const { nodes, edges } = convertToNetworkData(selectedNode)
-    
-    if (nodes.length === 0) return
-
-    const nodesDataSet = new DataSet(nodes)
-    const edgesDataSet = new DataSet(edges)
-    
-    const data = { nodes: nodesDataSet, edges: edgesDataSet }
-    const options = getNetworkOptions()
-
-    if (networkInstance.current) {
-      networkInstance.current.destroy()
+    if (selectedNode) {
+      const { nodes, edges } = convertToNetworkData(selectedNode)
+      setNetworkData({
+        nodes: new DataSet(nodes),
+        edges: new DataSet(edges)
+      })
+    } else {
+      setNetworkData({ nodes: new DataSet(), edges: new DataSet() })
     }
+  }, [selectedNode, convertToNetworkData])
 
-    networkInstance.current = new Network(networkRef.current, data, options)
+  const options = useMemo(() => getNetworkOptions(), [])
 
-    // Event handlers
-    networkInstance.current.on('click', (event) => {
-      if (event.nodes.length > 0) {
-        const nodeId = event.nodes[0]
-        const nodeData = nodesDataSet.get(nodeId)
-        
-        if (connectionMode) {
-          // Handle connection mode logic directly
-          if (!firstSelectedNode) {
-            setFirstSelectedNode(nodeId)
-            // Visual feedback will be handled by re-render with updated firstSelectedNode
-          } else if (firstSelectedNode !== nodeId) {
-            // Create connection between first and second node
-            const connectionId = `custom-${firstSelectedNode}-${nodeId}-${Date.now()}`
-            const connectionTypeLabels = {
-              ethernet: 'Ethernet',
-              fiber: 'Fiber Optic',
-              wireless: 'Wireless',
-              vpn: 'VPN',
-              custom: 'Custom Link'
-            }
-            
-            const newConnection = {
-              id: connectionId,
-              from: firstSelectedNode,
-              to: nodeId,
-              type: selectedConnectionType,
-              label: connectionTypeLabels[selectedConnectionType] || 'Connection'
-            }
-            
-            setCustomConnections(prev => [...prev, newConnection])
-            setFirstSelectedNode(null)
-          } else {
-            // Same node clicked, deselect
-            setFirstSelectedNode(null)
+  // Initialize network instance
+  useEffect(() => {
+    if (networkRef.current) {
+      const network = new Network(networkRef.current, {}, options)
+      networkInstance.current = network
+
+      const stabilizationDoneHandler = () => {
+        network.setOptions({ physics: false })
+      }
+      network.on('stabilizationIterationsDone', stabilizationDoneHandler)
+
+      return () => {
+        if (networkInstance.current) {
+          networkInstance.current.destroy()
+          networkInstance.current = null
+        }
+      }
+    }
+  }, [options])
+
+  // Update data in network instance
+  useEffect(() => {
+    if (networkInstance.current) {
+      networkInstance.current.setData(networkData)
+      if (networkData.nodes.length > 0) {
+        networkInstance.current.setOptions({ physics: { enabled: true } })
+        networkInstance.current.stabilize()
+      }
+    }
+  }, [networkData])
+
+  // Connection mode handlers
+  const deleteCustomConnection = useCallback((edgeId) => {
+    // Only delete custom connections (not hierarchical ones)
+    if (String(edgeId).startsWith('custom-')) {
+      onCustomConnectionsChange(prev => prev.filter(conn => conn.id !== edgeId))
+    }
+  }, [onCustomConnectionsChange])
+
+  // Event handlers with useCallback to memoize them
+  const clickHandler = useCallback((event) => {
+    if (event.nodes.length > 0) {
+      const nodeId = event.nodes[0]
+      const nodeData = networkData.nodes.get(nodeId)
+
+      if (connectionMode) {
+        if (!firstSelectedNode) {
+          setFirstSelectedNode(nodeId)
+        } else if (firstSelectedNode !== nodeId) {
+          const connectionId = `custom-${firstSelectedNode}-${nodeId}-${Date.now()}`
+          const connectionTypeLabels = {
+            ethernet: 'Ethernet', fiber: 'Fiber Optic', wireless: 'Wireless', vpn: 'VPN', custom: 'Custom Link'
           }
+          const newConnection = {
+            id: connectionId, from: firstSelectedNode, to: nodeId, type: selectedConnectionType, label: connectionTypeLabels[selectedConnectionType] || 'Connection'
+          }
+          onCustomConnectionsChange(prev => [...prev, newConnection])
+          setFirstSelectedNode(null)
         } else {
-          setSelectedTopoNode(nodeData)
-          setShowNodeInfo(true)
+          setFirstSelectedNode(null)
         }
       } else {
-        if (!connectionMode) {
-          setShowNodeInfo(false)
-          setSelectedTopoNode(null)
-        }
+        setSelectedTopoNode(nodeData)
+        setShowNodeInfo(true)
       }
-    })
+    } else if (!connectionMode) {
+      setShowNodeInfo(false)
+      setSelectedTopoNode(null)
+    }
+  }, [connectionMode, firstSelectedNode, networkData, onCustomConnectionsChange, selectedConnectionType])
 
-    // Handle edge clicks for deletion in connection mode
-    networkInstance.current.on('selectEdge', (event) => {
-      if (connectionMode && event.edges.length > 0) {
-        const edgeId = event.edges[0]
-        deleteCustomConnection(edgeId)
-      }
-    })
+  const selectEdgeHandler = useCallback((event) => {
+    if (connectionMode && event.edges.length > 0) {
+      const edgeId = event.edges[0]
+      deleteCustomConnection(edgeId)
+    }
+  }, [connectionMode, deleteCustomConnection])
 
-    // Handle right-click context menu
-    networkInstance.current.on('oncontext', (event) => {
-      event.event.preventDefault()
-      
-      if (event.nodes.length > 0) {
-        const nodeId = event.nodes[0]
-        const rect = networkRef.current.getBoundingClientRect()
-        
-        setContextMenu({
-          visible: true,
-          x: event.event.clientX,
-          y: event.event.clientY,
-          nodeId: nodeId
-        })
-      } else {
-        setContextMenu({ visible: false, x: 0, y: 0, nodeId: null })
-      }
-    })
+  const onContextHandler = useCallback((event) => {
+    event.event.preventDefault()
+    const nodeId = networkInstance.current.getNodeAt(event.pointer.DOM)
+    if (nodeId) {
+      setContextMenu({ visible: true, x: event.event.clientX, y: event.event.clientY, nodeId })
+    } else {
+      setContextMenu({ visible: false, x: 0, y: 0, nodeId: null })
+    }
+  }, [])
 
-    networkInstance.current.on('stabilizationIterationsDone', () => {
-      networkInstance.current.setOptions({ physics: false })
-    })
-
-    // Additional event listener to ensure physics is disabled after initial stabilization
-    networkInstance.current.on('afterDrawing', () => {
-      if (!connectionMode && networkInstance.current.physics.physicsEnabled) {
-        // Disable physics after drawing is complete for better performance
-        setTimeout(() => {
-          if (networkInstance.current) {
-            networkInstance.current.setOptions({ physics: { enabled: false } })
-          }
-        }, 100)
-      }
-    })
+  // Attach/detach event listeners
+  useEffect(() => {
+    const network = networkInstance.current
+    if (!network) return
+    network.on('click', clickHandler)
+    network.on('selectEdge', selectEdgeHandler)
+    network.on('oncontext', onContextHandler)
 
     return () => {
-      if (networkInstance.current) {
-        networkInstance.current.destroy()
-        networkInstance.current = null
-      }
+      network.off('click', clickHandler)
+      network.off('selectEdge', selectEdgeHandler)
+      network.off('oncontext', onContextHandler)
     }
-  }, [selectedNode, customConnections, connectionMode, firstSelectedNode, selectedConnectionType])
+  }, [clickHandler, selectEdgeHandler, onContextHandler])
 
   // Hide context menu on clicks outside
   useEffect(() => {
@@ -409,15 +410,16 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
 
   // Find node details from tree data
   const findNodeInTree = (nodeId, tree) => {
+    if (!tree) return null
     if (tree.id === nodeId) return tree
-    
+
     if (tree.children) {
       for (const child of tree.children) {
         const found = findNodeInTree(nodeId, child)
         if (found) return found
       }
     }
-    
+
     return null
   }
 
@@ -432,36 +434,6 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
     }
   }
 
-  // Connection mode handlers
-
-  const createCustomConnection = (fromNode, toNode) => {
-    const connectionId = `custom-${fromNode}-${toNode}-${Date.now()}`
-    const connectionTypeLabels = {
-      ethernet: 'Ethernet',
-      fiber: 'Fiber Optic',
-      wireless: 'Wireless',
-      vpn: 'VPN',
-      custom: 'Custom Link'
-    }
-    
-    const newConnection = {
-      id: connectionId,
-      from: fromNode,
-      to: toNode,
-      type: selectedConnectionType,
-      label: connectionTypeLabels[selectedConnectionType] || 'Connection'
-    }
-    
-    setCustomConnections(prev => [...prev, newConnection])
-  }
-
-  const deleteCustomConnection = (edgeId) => {
-    // Only delete custom connections (not hierarchical ones)
-    if (edgeId.startsWith('custom-')) {
-      setCustomConnections(prev => prev.filter(conn => conn.id !== edgeId))
-    }
-  }
-
   const toggleConnectionMode = () => {
     setConnectionMode(!connectionMode)
     setFirstSelectedNode(null)
@@ -473,7 +445,7 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
   }
 
   const clearAllCustomConnections = () => {
-    setCustomConnections([])
+    onCustomConnectionsChange([])
   }
 
   const toggleLayout = () => {
@@ -499,7 +471,7 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
   }
 
   // Node editing handlers
-  const handleEditNode = (nodeId) => {
+  const handleEditNode = useCallback((nodeId) => {
     const nodeData = findNodeInTree(nodeId, treeData)
     if (nodeData) {
       setEditingNodeData({
@@ -513,9 +485,9 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
       setShowEditModal(true)
       setContextMenu({ visible: false, x: 0, y: 0, nodeId: null })
     }
-  }
+  }, [treeData])
 
-  const handleDeleteNode = (nodeId) => {
+  const handleDeleteNode = useCallback((nodeId) => {
     if (nodeId === 'root') {
       alert('Cannot delete root node')
       return
@@ -538,9 +510,9 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
       onDataChange(updatedData)
       setContextMenu({ visible: false, x: 0, y: 0, nodeId: null })
     }
-  }
+  }, [treeData, onDataChange])
 
-  const handleSaveNodeEdit = () => {
+  const handleSaveNodeEdit = useCallback(() => {
     if (!editingNodeData) return
 
     const updateNodeInTree = (node) => {
@@ -567,12 +539,12 @@ const TopologyView = ({ selectedNode, treeData, onDataChange }) => {
     onDataChange(updatedData)
     setShowEditModal(false)
     setEditingNodeData(null)
-  }
+  }, [editingNodeData, treeData, onDataChange])
 
-  const handleCancelNodeEdit = () => {
+  const handleCancelNodeEdit = useCallback(() => {
     setShowEditModal(false)
     setEditingNodeData(null)
-  }
+  }, [])
 
   return (
     <div className="topology-view">
