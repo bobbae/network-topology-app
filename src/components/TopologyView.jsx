@@ -298,18 +298,8 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
   // React never needs to un-mount the canvas (avoids DOMException).
   // Initialize and manage the vis-network instance
   useEffect(() => {
-    // Clean up any existing instance first
-    if (networkInstance.current) {
-      try {
-        networkInstance.current.destroy()
-      } catch (e) {
-        console.warn('Error destroying network instance:', e)
-      }
-      networkInstance.current = null
-    }
-
-    // Create new instance if we have a selected node and container
-    if (selectedNode && networkRef.current) {
+    // Only initialize the vis-network instance once when a node is selected
+    if (!networkInstance.current && selectedNode && networkRef.current) {
       try {
         const network = new Network(networkRef.current, networkData, options)
         networkInstance.current = network
