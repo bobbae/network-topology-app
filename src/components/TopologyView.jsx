@@ -342,21 +342,15 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
     }
   }, [networkData])
 
-  // Destroy the vis-network instance when the selection becomes null or
-  // when this component unmounts.
+  // Destroy the vis-network instance when this component unmounts.
   useEffect(() => {
-    if (!selectedNode && networkInstance.current) {
-      networkInstance.current.destroy()
-      networkInstance.current = null
-    }
-
     return () => {
       if (networkInstance.current) {
         networkInstance.current.destroy()
         networkInstance.current = null
       }
     }
-  }, [selectedNode])
+  }, [])
 
   // Update data in network instance
   useEffect(() => {
