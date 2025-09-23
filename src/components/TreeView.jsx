@@ -10,11 +10,13 @@ import {
   FaChevronRight,
   FaChevronDown,
   FaSave,
-  FaTimes
+  FaTimes,
+  FaPlusSquare,
+  FaMinusSquare
 } from 'react-icons/fa'
 import './TreeView.css'
 
-const TreeView = ({ data, onNodeSelect, onDataChange, selectedNode }) => {
+const TreeView = ({ data, onNodeSelect, selectedNode, onNodeAdd, onNodeDelete, onNodeEdit }) => {
   const [expandedNodes, setExpandedNodes] = useState(new Set(['root']))
   const [editingNode, setEditingNode] = useState(null)
   const [editValue, setEditValue] = useState('')
@@ -40,54 +42,25 @@ const TreeView = ({ data, onNodeSelect, onDataChange, selectedNode }) => {
     setExpandedNodes(newExpanded)
   }
 
-  const addNode = (parentId, type) => {
-    const newNode = {
-      id: `${type}_${Date.now()}`,
-      name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
-      type,
-      ip: type !== 'network' ? '192.168.1.100' : undefined,
-      children: []
+  const getAllNodeIdsWithChildren = (node, nodeIds = new Set()) => {
+    if (node.children && node.children.length > 0) {
+      nodeIds.add(node.id)
+      node.children.forEach(child => getAllNodeIdsWithChildren(child, nodeIds))
     }
-
-    const updateTree = (node) => {
-      if (node.id === parentId) {
-        return {
-          ...node,
-          children: [...(node.children || []), newNode]
-        }
-      }
-      return {
-        ...node,
-        children: node.children?.map(updateTree) || []
-      }
-    }
-
-    const newData = updateTree(data)
-    onDataChange(newData)
-    setExpandedNodes(prev => new Set([...prev, parentId]))
+    return nodeIds
   }
 
-  const deleteNode = (nodeId) => {
-    if (nodeId === 'root') return
+  const handleExpandAll = () => {
+    setExpandedNodes(getAllNodeIdsWithChildren(data))
+  }
 
-    const removeFromTree = (node) => {
-      if (node.children) {
-        return {
-          ...node,
-          children: node.children
-            .filter(child => child.id !== nodeId)
-            .map(removeFromTree)
-        }
-      }
-      return node
-    }
+  const handleCollapseAll = () => {
+    setExpandedNodes(new Set(['root']))
+  }
 
-    const newData = removeFromTree(data)
-    onDataChange(newData)
-    
-    if (selectedNode?.id === nodeId) {
-      onNodeSelect(null)
-    }
+  const handleAddNode = (parentId, type) => {
+    onNodeAdd(parentId, type);
+    setExpandedNodes(prev => new Set([...prev, parentId]))
   }
 
   const startEdit = (node) => {
@@ -95,19 +68,8 @@ const TreeView = ({ data, onNodeSelect, onDataChange, selectedNode }) => {
     setEditValue(node.name)
   }
 
-  const saveEdit = (nodeId) => {
-    const updateTree = (node) => {
-      if (node.id === nodeId) {
-        return { ...node, name: editValue }
-      }
-      return {
-        ...node,
-        children: node.children?.map(updateTree) || []
-      }
-    }
-
-    const newData = updateTree(data)
-    onDataChange(newData)
+  const handleSaveEdit = (nodeId) => {
+    onNodeEdit(nodeId, editValue)
     setEditingNode(null)
     setEditValue('')
   }
@@ -148,10 +110,10 @@ const TreeView = ({ data, onNodeSelect, onDataChange, selectedNode }) => {
                   type="text"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && saveEdit(node.id)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(node.id)}
                   autoFocus
                 />
-                <button onClick={() => saveEdit(node.id)} className="save-btn">
+                <button onClick={() => handleSaveEdit(node.id)} className="save-btn">
                   <FaSave />
                 </button>
                 <button onClick={cancelEdit} className="cancel-btn">
@@ -173,7 +135,7 @@ const TreeView = ({ data, onNodeSelect, onDataChange, selectedNode }) => {
                     <FaEdit />
                   </button>
                   {node.id !== 'root' && (
-                    <button onClick={() => deleteNode(node.id)} title="Delete">
+                    <button onClick={() => onNodeDelete(node.id)} title="Delete">
                       <FaTrash />
                     </button>
                   )}
@@ -182,19 +144,19 @@ const TreeView = ({ data, onNodeSelect, onDataChange, selectedNode }) => {
                       <FaPlus />
                     </button>
                     <div className="add-menu">
-                      <button onClick={() => addNode(node.id, 'network')}>
+                      <button onClick={() => handleAddNode(node.id, 'network')}>
                         Add Network
                       </button>
-                      <button onClick={() => addNode(node.id, 'router')}>
+                      <button onClick={() => handleAddNode(node.id, 'router')}>
                         Add Router
                       </button>
-                      <button onClick={() => addNode(node.id, 'switch')}>
+                      <button onClick={() => handleAddNode(node.id, 'switch')}>
                         Add Switch
                       </button>
-                      <button onClick={() => addNode(node.id, 'server')}>
+                      <button onClick={() => handleAddNode(node.id, 'server')}>
                         Add Server
                       </button>
-                      <button onClick={() => addNode(node.id, 'device')}>
+                      <button onClick={() => handleAddNode(node.id, 'device')}>
                         Add Device
                       </button>
                     </div>
@@ -218,6 +180,14 @@ const TreeView = ({ data, onNodeSelect, onDataChange, selectedNode }) => {
     <div className="tree-view">
       <div className="tree-header">
         <h3>Network Hierarchy</h3>
+        <div className="tree-controls">
+          <button onClick={handleExpandAll} title="Expand All">
+            <FaPlusSquare />
+          </button>
+          <button onClick={handleCollapseAll} title="Collapse All">
+            <FaMinusSquare />
+          </button>
+        </div>
       </div>
       <div className="tree-content">
         {renderNode(data)}
