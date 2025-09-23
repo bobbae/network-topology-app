@@ -195,10 +195,11 @@ function App() {
           // Assuming the loaded data has the same structure as our initialData
           dispatch({ type: 'SET_TREE_DATA', payload: loadedData.tree });
           dispatch({ type: 'SET_TOPOLOGIES', payload: loadedData.topologies });
-          // Optionally reset selected key if the old one doesn't exist in new data
-          if (!loadedData.topologies[selectedTreeNodeKey]) {
-            dispatch({ type: 'SET_SELECTED_TREE_NODE_KEY', payload: loadedData.tree[0]?.key || null });
-          }
+          // Reset selected key to first node of loaded tree
+          dispatch({
+            type: 'SET_SELECTED_TREE_NODE_KEY',
+            payload: loadedData.tree[0]?.key || null,
+          });
         } catch (error) {
           console.error("Error parsing JSON:", error);
           alert("Invalid JSON file.");
