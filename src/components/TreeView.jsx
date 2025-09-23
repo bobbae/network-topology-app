@@ -122,9 +122,9 @@ const TreeView = ({ data, onNodeSelect, selectedNode, onNodeAdd, onNodeDelete, o
               </div>
             ) : (
               <>
-                <span 
+                <span
                   className="node-label"
-                  onClick={() => onNodeSelect(node)}
+                  onClick={(e) => { e.stopPropagation(); setTimeout(() => onNodeSelect(node), 0); }}
                 >
                   {node.name}
                   {node.ip && <span className="node-ip"> ({node.ip})</span>}
