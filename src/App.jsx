@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { FaDownload, FaUpload } from 'react-icons/fa'
+import { useState, useRef, useMemo, useCallback } from 'react'
+import { FaDownload, FaUpload, FaSearch } from 'react-icons/fa'
 import TreeView from './components/TreeView'
 import TopologyView from './components/TopologyView'
 import './App.css'
@@ -87,22 +87,29 @@ function App() {
     reader.onload = (e) => {
       try {
         const loadedData = JSON.parse(e.target.result)
-        
-        // Validate the data structure
-        if (loadedData.treeData && typeof loadedData.treeData === 'object') {
-          setTreeData(loadedData.treeData)
-          
-          // Load custom connections if they exist
-          if (Array.isArray(loadedData.customConnections)) {
-            setCustomConnections(loadedData.customConnections)
-          } else {
-            setCustomConnections([])
-          }
-          
-          // Reset selected node when loading new data
-          setSelectedNode(null)
-          
-          alert(`Network topology loaded successfully!${loadedData.exportedAt ? ` (Created: ${new Date(loadedData.exportedAt).toLocaleString()})` : ''}`)
+
+        // More robust validation
+        if (
+          loadedData &&
+          typeof loadedData === 'object' &&
+          loadedData.treeData &&
+          typeof loadedData.treeData === 'object' &&
+          !Array.isArray(loadedData.treeData) &&
+          'id' in loadedData.treeData &&
+          'children' in loadedData.treeData
+        ) {
+          setTreeData(loadedData.treeData);
+
+          // Load custom connections if they exist and are an array
+          setCustomConnections(
+            Array.isArray(loadedData.customConnections)
+              ? loadedData.customConnections
+              : []
+          );
+
+          setSelectedNode(null);
+
+          alert(`Network topology loaded successfully!${loadedData.exportedAt ? ` (Created: ${new Date(loadedData.exportedAt).toLocaleString()})` : ''}`);
         } else {
           throw new Error('Invalid file format')
         }
@@ -121,25 +128,136 @@ function App() {
     fileInputRef.current?.click()
   }
 
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value)
+  }
+
+  const displayedData = useMemo(() => {
+    if (!searchTerm) {
+      return treeData
+    }
+
+    const filterTree = (node, term) => {
+      const lowerCaseTerm = term.toLowerCase()
+
+      // If the node itself matches, return it and all its children
+      if (node.name.toLowerCase().includes(lowerCaseTerm)) {
+        return node
+      }
+
+      // If the node has children, filter them
+      if (node.children) {
+        const filteredChildren = node.children
+          .map(child => filterTree(child, term))
+          .filter(child => child !== null)
+
+        // If any of the children match, return the node with the filtered children
+        if (filteredChildren.length > 0) {
+          return { ...node, children: filteredChildren }
+        }
+      }
+
+      return null
+    }
+
+    const filteredChildren = treeData.children
+      .map(child => filterTree(child, searchTerm))
+      .filter(child => child !== null)
+
+    return { ...treeData, children: filteredChildren }
+  }, [searchTerm, treeData])
+
+  const handleAddNode = useCallback((parentId, type) => {
+    const newNode = {
+      id: `${type}_${Date.now()}`,
+      name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+      type,
+      ip: type !== 'network' ? '192.168.1.100' : undefined,
+      children: []
+    };
+
+    const updateTree = (node) => {
+      if (node.id === parentId) {
+        return {
+          ...node,
+          children: [...(node.children || []), newNode]
+        };
+      }
+      if (node.children) {
+        return {
+          ...node,
+          children: node.children.map(updateTree)
+        };
+      }
+      return node;
+    };
+
+    setTreeData(prevData => updateTree(prevData));
+  }, []);
+
+  const handleDeleteNode = useCallback((nodeId) => {
+    if (nodeId === 'root') return;
+
+    const removeFromTree = (node) => {
+      if (node.children) {
+        return {
+          ...node,
+          children: node.children
+            .filter(child => child.id !== nodeId)
+            .map(removeFromTree)
+        };
+      }
+      return node;
+    };
+
+    setTreeData(prevData => {
+      const newData = removeFromTree(prevData);
+      if (selectedNode?.id === nodeId) {
+        setSelectedNode(null);
+      }
+      return newData;
+    });
+  }, [selectedNode]);
+
+  const handleSaveNodeEdit = useCallback((nodeId, newName) => {
+    const updateTree = (node) => {
+      if (node.id === nodeId) {
+        return { ...node, name: newName };
+      }
+      if (node.children) {
+        return {
+          ...node,
+          children: node.children.map(updateTree)
+        };
+      }
+      return node;
+    };
+    setTreeData(prevData => updateTree(prevData));
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-content">
           <h1>Network Topology Manager</h1>
-          <div className="header-actions">
-            <button 
-              className="save-btn"
+          <div className="file-actions">
+            <button
+              className="action-btn save-btn"
               onClick={handleSaveToFile}
-              title="Save topology to JSON file"
+              title="Save topology to a JSON file"
             >
-              <FaDownload /> Save
+              <FaDownload />
+              <span>Save to File</span>
             </button>
-            <button 
-              className="load-btn"
+            <button
+              className="action-btn load-btn"
               onClick={triggerFileInput}
-              title="Load topology from JSON file"
+              title="Load topology from a JSON file"
             >
-              <FaUpload /> Load
+              <FaUpload />
+              <span>Load from File</span>
             </button>
             <input
               ref={fileInputRef}
@@ -153,11 +271,22 @@ function App() {
       </header>
       <div className="app-content">
         <div className="left-panel">
+          <div className="search-bar">
+            <FaSearch className="search-icon" />
+            <input
+              type="text"
+              placeholder="Search nodes..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+            />
+          </div>
           <TreeView 
-            data={treeData}
+            data={displayedData}
             onNodeSelect={setSelectedNode}
-            onDataChange={setTreeData}
             selectedNode={selectedNode}
+            onNodeAdd={handleAddNode}
+            onNodeDelete={handleDeleteNode}
+            onNodeEdit={handleSaveNodeEdit}
           />
         </div>
         <div className="right-panel">
@@ -165,6 +294,8 @@ function App() {
             selectedNode={selectedNode}
             treeData={treeData}
             onDataChange={setTreeData}
+            customConnections={customConnections}
+            onCustomConnectionsChange={setCustomConnections}
           />
         </div>
       </div>
