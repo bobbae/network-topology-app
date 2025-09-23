@@ -296,17 +296,64 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
   // Create the vis-network instance the first time a node is selected.
   // Keep the instance alive while the user keeps selecting nodes so that
   // React never needs to un-mount the canvas (avoids DOMException).
+  // Initialize and manage the vis-network instance
   useEffect(() => {
-    if (selectedNode && networkRef.current && !networkInstance.current) {
-      const network = new Network(networkRef.current, {}, options)
-      networkInstance.current = network
-
-      const stabilizationDoneHandler = () => {
-        network.setOptions({ physics: false })
+    // Clean up any existing instance first
+    if (networkInstance.current) {
+      try {
+        networkInstance.current.destroy()
+      } catch (e) {
+        console.warn('Error destroying network instance:', e)
       }
-      network.on('stabilizationIterationsDone', stabilizationDoneHandler)
+      networkInstance.current = null
     }
-  }, [selectedNode, options])
+
+    // Create new instance if we have a selected node and container
+    if (selectedNode && networkRef.current) {
+      try {
+        const network = new Network(networkRef.current, networkData, options)
+        networkInstance.current = network
+
+        const stabilizationDoneHandler = () => {
+          network.setOptions({ physics: false })
+        }
+        network.on('stabilizationIterationsDone', stabilizationDoneHandler)
+
+        // Stabilize the network
+        if (networkData.nodes.length > 0) {
+          network.stabilize()
+        }
+      } catch (e) {
+        console.error('Error creating network instance:', e)
+        networkInstance.current = null
+      }
+    }
+
+    // Cleanup on unmount or when selectedNode changes
+    return () => {
+      if (networkInstance.current) {
+        try {
+          networkInstance.current.destroy()
+        } catch (e) {
+          console.warn('Error cleaning up network instance:', e)
+        }
+        networkInstance.current = null
+      }
+    }
+  }, [selectedNode]) // Only depend on selectedNode, not networkData
+
+  // Update data in existing network instance
+  useEffect(() => {
+    if (networkInstance.current && networkData.nodes.length > 0) {
+      try {
+        networkInstance.current.setData(networkData)
+        networkInstance.current.setOptions({ physics: { enabled: true } })
+        networkInstance.current.stabilize()
+      } catch (e) {
+        console.error('Error updating network data:', e)
+      }
+    }
+  }, [networkData])
 
   // Destroy the vis-network instance when the selection becomes null or
   // when this component unmounts.
