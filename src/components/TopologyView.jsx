@@ -319,7 +319,6 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
         }
         network.on('stabilizationIterationsDone', stabilizationDoneHandler)
 
-        // Stabilize the network
         if (networkData.nodes.length > 0) {
           network.stabilize()
         }
@@ -328,19 +327,7 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
         networkInstance.current = null
       }
     }
-
-    // Cleanup on unmount or when selectedNode changes
-    return () => {
-      if (networkInstance.current) {
-        try {
-          networkInstance.current.destroy()
-        } catch (e) {
-          console.warn('Error cleaning up network instance:', e)
-        }
-        networkInstance.current = null
-      }
-    }
-  }, [selectedNode]) // Only depend on selectedNode, not networkData
+  }, [selectedNode])
 
   // Update data in existing network instance
   useEffect(() => {
