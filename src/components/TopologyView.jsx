@@ -908,4 +908,20 @@ const TopologyView = ({ selectedNode, treeData, onDataChange, customConnections,
   )
 }
 
+import { useEffect } from 'react'
+
+// final cleanup once on unmount
+useEffect(() => {
+  return () => {
+    if (networkInstance.current) {
+      try {
+        networkInstance.current.destroy()
+      } catch (e) {
+        console.warn('Error destroying network instance on unmount:', e)
+      }
+      networkInstance.current = null
+    }
+  }
+}, [])
+
 export default TopologyView
